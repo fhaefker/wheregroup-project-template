@@ -21,8 +21,8 @@ on:
     branches:
       - main
     paths:
-      - 'COPILOT_ESSENTIALS.md'
-      # Trigger wenn COPILOT_ESSENTIALS.md geändert wird
+      - '.github/workflows/sync-rules.yml'
+      # Trigger wenn Workflow selbst geändert wird
 
 jobs:
   sync-rules:
@@ -39,20 +39,39 @@ jobs:
           fetch-depth: 1
           # Shallow clone ausreichend
       
-      - name: Check if COPILOT_ESSENTIALS.md exists
-        id: check-file
+      - name: Download WhereGroup Rules from Knowledge Base
+        id: download
         run: |
-          if [ -f "COPILOT_ESSENTIALS.md" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "✅ COPILOT_ESSENTIALS.md gefunden"
+          echo "📥 Downloading COPILOT_ESSENTIALS.md from wheregroup-knowledge-base..."
+          
+          # Try GitHub Raw URL first
+          HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/copilot-essentials.md \
+            https://raw.githubusercontent.com/fhaefker/wheregroup-knowledge-base/main/COPILOT_ESSENTIALS.md)
+          
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ Download via Raw URL erfolgreich (HTTP $HTTP_CODE)"
+            cp /tmp/copilot-essentials.md COPILOT_ESSENTIALS.md
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "❌ COPILOT_ESSENTIALS.md nicht gefunden - RULE 1 Violation!"
-            exit 1
+            echo "❌ Raw URL fehlgeschlagen (HTTP $HTTP_CODE)"
+            echo "🔄 Fallback: Clone Repository..."
+            
+            # Fallback: Clone repository
+            git clone --depth=1 --single-branch --branch=main \
+              https://github.com/fhaefker/wheregroup-knowledge-base.git /tmp/kb
+            
+            if [ -f "/tmp/kb/COPILOT_ESSENTIALS.md" ]; then
+              cp /tmp/kb/COPILOT_ESSENTIALS.md COPILOT_ESSENTIALS.md
+              echo "✅ Download via Git Clone erfolgreich"
+            else
+              echo "❌ RULE 1 VIOLATION: COPILOT_ESSENTIALS.md nicht gefunden!"
+              exit 1
+            fi
           fi
+          
+          echo "downloaded=true" >> $GITHUB_OUTPUT
       
       - name: Verify File Integrity (RULE 2 - Never Lie)
-        if: steps.check-file.outputs.exists == 'true'
+        if: steps.download.outputs.downloaded == 'true'
         run: |
           # Prüfe ob Datei mindestens 600 Zeilen hat (Schutz gegen versehentliches Löschen)
           LINES=$(wc -l < COPILOT_ESSENTIALS.md)
@@ -113,6 +132,8 @@ jobs:
       - name: Commit and Push (RULE 1 Dimension 3 - Persist)
         if: steps.check-changes.outputs.changed == 'true'
         run: |
+          SOURCE_LINES=$(wc -l < COPILOT_ESSENTIALS.md)
+          
           git config user.name "WhereGroup Rules Sync Bot"
           git config user.email "actions@github.com"
           
@@ -124,7 +145,7 @@ jobs:
 ✅ RULE 2 (Never Lie): Integrity verified ($SOURCE_LINES lines)
 ✅ RULE 3 (Never Crash): Automated weekly sync
 
-Source: COPILOT_ESSENTIALS.md
+Source: https://github.com/fhaefker/wheregroup-knowledge-base/COPILOT_ESSENTIALS.md
 Target: .github/copilot-instructions.md
 Sync Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
           
