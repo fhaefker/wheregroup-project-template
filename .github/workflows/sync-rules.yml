@@ -1,0 +1,153 @@
+# WhereGroup Knowledge Base Sync
+# Automatischer wöchentlicher Sync von COPILOT_ESSENTIALS.md → .github/copilot-instructions.md
+# 
+# RULE 1 Dimension 1 (Make Available): Stellt sicher dass Copilot immer aktuelle Regeln hat
+# RULE 3 Dimension 2 (Monitor): Läuft wöchentlich + manuell triggerbar
+#
+# Quelle: https://github.com/fhaefker/wheregroup-knowledge-base/COPILOT_ESSENTIALS.md
+# Ziel: .github/copilot-instructions.md (von GitHub Copilot automatisch gelesen)
+
+name: Sync WhereGroup Rules to Copilot
+
+on:
+  schedule:
+    # Jeden Montag um 00:00 UTC
+    - cron: '0 0 * * 1'
+  
+  workflow_dispatch:
+    # Manueller Trigger über GitHub Actions UI
+  
+  push:
+    branches:
+      - main
+    paths:
+      - 'COPILOT_ESSENTIALS.md'
+      # Trigger wenn COPILOT_ESSENTIALS.md geändert wird
+
+jobs:
+  sync-rules:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      # Benötigt Schreibrechte für Commit
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          # Shallow clone ausreichend
+      
+      - name: Check if COPILOT_ESSENTIALS.md exists
+        id: check-file
+        run: |
+          if [ -f "COPILOT_ESSENTIALS.md" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ COPILOT_ESSENTIALS.md gefunden"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "❌ COPILOT_ESSENTIALS.md nicht gefunden - RULE 1 Violation!"
+            exit 1
+          fi
+      
+      - name: Verify File Integrity (RULE 2 - Never Lie)
+        if: steps.check-file.outputs.exists == 'true'
+        run: |
+          # Prüfe ob Datei mindestens 600 Zeilen hat (Schutz gegen versehentliches Löschen)
+          LINES=$(wc -l < COPILOT_ESSENTIALS.md)
+          echo "📊 COPILOT_ESSENTIALS.md: $LINES Zeilen"
+          
+          if [ "$LINES" -lt 600 ]; then
+            echo "❌ RULE 1 VIOLATION: Datei zu klein ($LINES Zeilen < 600 erwartet)"
+            echo "❌ Möglicher Wissensverlust detektiert - Sync abgebrochen"
+            exit 1
+          fi
+          
+          # Prüfe ob kritische Schlüsselwörter vorhanden sind
+          if ! grep -q "RULE 1" COPILOT_ESSENTIALS.md || \
+             ! grep -q "RULE 2" COPILOT_ESSENTIALS.md || \
+             ! grep -q "RULE 3" COPILOT_ESSENTIALS.md || \
+             ! grep -q "RULE 4" COPILOT_ESSENTIALS.md || \
+             ! grep -q "RULE 5" COPILOT_ESSENTIALS.md; then
+            echo "❌ RULE 1 VIOLATION: Kritische Regeln fehlen in COPILOT_ESSENTIALS.md"
+            exit 1
+          fi
+          
+          echo "✅ Integritätsprüfung bestanden"
+      
+      - name: Create .github directory if not exists
+        run: |
+          mkdir -p .github
+          echo "✅ .github/ Verzeichnis bereit"
+      
+      - name: Copy COPILOT_ESSENTIALS.md to copilot-instructions.md
+        run: |
+          cp COPILOT_ESSENTIALS.md .github/copilot-instructions.md
+          echo "✅ Kopiert: COPILOT_ESSENTIALS.md → .github/copilot-instructions.md"
+      
+      - name: Verify Sync Success (RULE 2 - Never Lie)
+        run: |
+          if [ ! -f ".github/copilot-instructions.md" ]; then
+            echo "❌ Sync fehlgeschlagen - Datei nicht erstellt"
+            exit 1
+          fi
+          
+          SOURCE_LINES=$(wc -l < COPILOT_ESSENTIALS.md)
+          TARGET_LINES=$(wc -l < .github/copilot-instructions.md)
+          
+          if [ "$SOURCE_LINES" -ne "$TARGET_LINES" ]; then
+            echo "❌ RULE 1 VIOLATION: Zeilenanzahl unterschiedlich"
+            echo "   Quelle: $SOURCE_LINES Zeilen"
+            echo "   Ziel:   $TARGET_LINES Zeilen"
+            exit 1
+          fi
+          
+          echo "✅ Sync erfolgreich: $SOURCE_LINES Zeilen synchronisiert"
+      
+      - name: Check for changes
+        id: check-changes
+        run: |
+          git diff --quiet .github/copilot-instructions.md || echo "changed=true" >> $GITHUB_OUTPUT
+      
+      - name: Commit and Push (RULE 1 Dimension 3 - Persist)
+        if: steps.check-changes.outputs.changed == 'true'
+        run: |
+          git config user.name "WhereGroup Rules Sync Bot"
+          git config user.email "actions@github.com"
+          
+          git add .github/copilot-instructions.md
+          
+          git commit -m "chore: Sync WhereGroup Rules to Copilot Instructions
+
+✅ RULE 1 (Never Forget): Knowledge persisted
+✅ RULE 2 (Never Lie): Integrity verified ($SOURCE_LINES lines)
+✅ RULE 3 (Never Crash): Automated weekly sync
+
+Source: COPILOT_ESSENTIALS.md
+Target: .github/copilot-instructions.md
+Sync Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          
+          git push
+          echo "✅ Änderungen committed und gepusht"
+      
+      - name: No Changes Detected
+        if: steps.check-changes.outputs.changed != 'true'
+        run: |
+          echo "ℹ️  Keine Änderungen - .github/copilot-instructions.md bereits aktuell"
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "📋 WhereGroup Rules Sync Zusammenfassung"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📅 Zeitpunkt: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo "✅ RULE 1 Compliance: Knowledge preserved"
+          echo "✅ RULE 2 Compliance: Integrity verified"
+          echo "✅ RULE 3 Compliance: Automated monitoring"
+          
+          if [ -f ".github/copilot-instructions.md" ]; then
+            LINES=$(wc -l < .github/copilot-instructions.md)
+            CHARS=$(wc -c < .github/copilot-instructions.md)
+            echo "📊 Copilot Instructions: $LINES Zeilen, $CHARS Zeichen"
+          fi
